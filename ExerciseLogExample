@@ -1,0 +1,162 @@
+# --- Step 1: Import necessary libraries ---
+import pandas as pd
+import numpy as np # Used for np.nan and potentially for more advanced numeric operations
+
+# --- Step 2: Load the CSV file into a Pandas DataFrame ---
+# Ensure 'Exercise.csv' is in the same directory as your JupyterLite notebook.
+csv_file_name = 'Exercise.csv'
+try:
+    df = pd.read_csv(csv_file_name)
+    print(f"'{csv_file_name}' loaded successfully!")
+    print("Original DataFrame head:")
+    print(df.head())
+    print("\nOriginal DataFrame info:")
+    df.info()
+except FileNotFoundError:
+    print(f"Error: '{csv_file_name}' not found. Please ensure it's in the same directory.")
+    # In a real application, you might raise an error or provide a default DataFrame
+    exit() # Exit the script if the file isn't found
+except Exception as e:
+    print(f"An error occurred while loading the CSV: {e}")
+    exit()
+
+# --- Step 3: Handle NaN values by replacing them with blank strings ---
+# Pandas reads empty cells as NaN by default.
+# We'll replace these numpy.nan values with empty strings.
+df_cleaned = df.fillna('')
+
+print("\nDataFrame after replacing NaN with blank strings (head):")
+print(df_cleaned.head())
+print("\nDataFrame info after cleaning (notice types might become 'object' if mixed):")
+df_cleaned.info()
+
+# --- Step 4: Identify the column containing exercise types (like "Prehab", "Alts") ---
+# This is crucial. We need to find the column that holds these descriptive strings.
+# We'll try to automatically detect it based on common exercise names, but you might
+# need to manually set `exercise_type_column_name` if auto-detection fails.
+
+exercise_type_column_name = None
+# Common exercise names found in your image
+potential_exercise_names = ['Prehab', 'Walk', 'W/Run', 'Run Mi', 'Elliptical', 'Alts', 'Big 5', 'CD', 'Natural work']
+
+for col in df_cleaned.columns:
+    # Check if the column contains any of the potential exercise names
+    # .astype(str) is used to ensure comparison even if column contains numbers
+    if df_cleaned[col].astype(str).isin(potential_exercise_names).any():
+        exercise_type_column_name = col
+        break
+
+if exercise_type_column_name is None:
+    print("\nCould not automatically find the column containing exercise types (e.g., 'Prehab', 'Alts').")
+    print("Available columns:", df_cleaned.columns.tolist())
+    print("\nPlease manually set 'exercise_type_column_name' in the code.")
+    # Example manual setting (uncomment and adjust if auto-detection fails):
+    # exercise_type_column_name = 'Unnamed: 1' # Or 'Activity', 'Exercise_Type', etc.
+    exit() # Stop execution if the column isn't found
+
+print(f"\nIdentified exercise type column: '{exercise_type_column_name}'")
+
+# Get the integer index of the exercise type column
+exercise_col_idx = df_cleaned.columns.get_loc(exercise_type_column_name)
+
+# --- Step 5: Define the function to get averages for desired exercise types ---
+
+def get_average_for_exercise_data(dataframe, exercise_types_list, exercise_col_name, num_cells_to_extract=7):
+    """
+    Finds specified exercise types in the DataFrame, extracts 'num_cells_to_extract'
+    cells to their right, converts them to numeric, and calculates their average.
+
+    Args:
+        dataframe (pd.DataFrame): The cleaned Pandas DataFrame.
+        exercise_types_list (list): A list of strings, e.g., ['Prehab', 'Alts'].
+        exercise_col_name (str): The name of the column containing the exercise types.
+        num_cells_to_extract (int): The number of cells to extract to the right.
+
+    Returns:
+        dict: A dictionary where keys are exercise types and values are their averages.
+              Returns None for an exercise type if no data is found or all extracted
+              values are non-numeric.
+    """
+    results_averages = {}
+    
+    # Get the integer index of the exercise column for slicing
+    col_idx_for_exercise_type = dataframe.columns.get_loc(exercise_col_name)
+
+    for exercise_type in exercise_types_list:
+        all_numeric_values_for_type = []
+
+        # Filter rows for the current exercise type
+        # Use .astype(str) for robust comparison as column might be mixed type 'object'
+        filtered_rows = dataframe[dataframe[exercise_col_name].astype(str) == exercise_type]
+
+        if filtered_rows.empty:
+            print(f"No entries found for '{exercise_type}'.")
+            results_averages[exercise_type] = None
+            continue
+
+        for index, row in filtered_rows.iterrows():
+            # Calculate the start and end indices for the cells to extract
+            start_cells_idx = col_idx_for_exercise_type + 1
+            end_cells_idx = start_cells_idx + num_cells_to_extract
+
+            # Ensure we don't go out of bounds
+            if end_cells_idx <= len(dataframe.columns):
+                extracted_cells = row.iloc[start_cells_idx : end_cells_idx]
+                
+                # Convert extracted cells to numeric, coercing errors to NaN
+                numeric_cells = pd.to_numeric(extracted_cells, errors='coerce')
+                
+                # Filter out NaN values before adding to the list
+                # Use .dropna() on the Series
+                all_numeric_values_for_type.extend(numeric_cells.dropna().tolist())
+            else:
+                print(f"Warning: '{exercise_type}' found in row {index}, but not enough columns to its right to extract {num_cells_to_extract} values.")
+        
+        # Calculate the average if there are any numeric values
+        if all_numeric_values_for_type:
+            average = np.mean(all_numeric_values_for_type)
+            results_averages[exercise_type] = average
+        else:
+            print(f"No numeric data found to average for '{exercise_type}'.")
+            results_averages[exercise_type] = None
+            
+    return results_averages
+
+# --- Step 6: Use the function with your desired exercise types ---
+
+# ---------------------- Define the exercise types you want to get averages for ----------------------#
+desired_exercises = ['Prehab', 'Alts', 'W/Run', 'Run Mi', 'Big 5'] # Add or remove as needed
+# ---------------------- Define the exercise types you want to get averages for ----------------------#
+
+print("\n--- Calculating Averages for Desired Exercises ---")
+exercise_averages = get_average_for_exercise_data(
+    dataframe=df_cleaned,
+    exercise_types_list=desired_exercises,
+    exercise_col_name=exercise_type_column_name,
+    num_cells_to_extract=7 # This is the '7 cells to the right'
+)
+
+# --- Step 7: Print the results ---
+print("\n--- Averages ---")
+for exercise, avg_value in exercise_averages.items():
+    if avg_value is not None:
+        print(f"Average for '{exercise}': {avg_value:.2f}") # Formatted to 2 decimal places
+    else:
+        print(f"Average for '{exercise}': No data available or all values were non-numeric.")
+
+# Print out the pace
+import math
+
+minutes = exercise_averages['W/Run']
+distance = exercise_averages['Run Mi']
+pacerr = (minutes/distance)
+integerr = math.floor(pacerr)
+secrr = round((pacerr - integerr)*60)
+print(f"Average pace: {integerr} min {secrr} sec")
+print("\n--- PACE CHART ---")
+print(f"2.0 mi: {(2*pacerr):.2f}")
+print(f"3.0 mi: {(3*pacerr):.2f}")
+print(f"3.5 mi: {(3.5*pacerr):.2f}")
+print(f"4.0 mi: {(4*pacerr):.2f}")
+print(f"4.5 mi: {(4.5*pacerr):.2f}")
+print(f"5.0 mi: {(5*pacerr):.2f}")
