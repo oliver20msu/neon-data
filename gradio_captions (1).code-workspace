@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../../gradio_captions"
+		},
+		{
+			"path": "images_to_caption"
+		},
+		{
+			"path": "../../../gradio_captions/images_to_caption"
+		}
+	],
+	"settings": {}
+}
